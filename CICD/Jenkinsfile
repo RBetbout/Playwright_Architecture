@@ -1,0 +1,101 @@
+// Dans la configuration du job, "Script Path" doit valoir : CICD/Jenkinsfile
+//
+// Prérequis Jenkins :
+//  - plugin NodeJS avec une installation nommée "node-22"
+//  - plugins JUnit et HTML Publisher
+//  - credential "Username with password" par environnement : e2e-user-dev, e2e-user-staging, e2e-user-prod
+pipeline {
+  agent any
+
+  tools { nodejs 'node-22' }
+
+  parameters {
+    choice(name: 'TEST_ENV', choices: ['dev', 'staging', 'prod'], description: 'Environnement cible')
+    choice(name: 'SUITE', choices: ['smoke', 'regression', 'functional', 'navigation', 'forms', 'a11y', 'seo', 'links', 'bdd', 'all'], description: 'Suite à exécuter')
+    // Seuls les navigateurs activés dans Playwright/playwright.config.ts (DEVICES) sont disponibles.
+    choice(name: 'BROWSER', choices: ['chromium', 'all'], description: 'Projet Playwright')
+    string(name: 'BASE_URL', defaultValue: '', description: "URL cible (laisser vide si elle est définie dans la configuration du job)")
+  }
+
+  options {
+    timeout(time: 60, unit: 'MINUTES')
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    CI = 'true'
+    TEST_ENV = "${params.TEST_ENV}"
+  }
+
+  stages {
+    // package.json et la configuration de l'outillage sont dans Playwright/ : toutes les commandes npm s'y exécutent.
+    stage('Installation') {
+      steps {
+        dir('Playwright') {
+          sh 'npm ci'
+          sh 'npx playwright install --with-deps'
+        }
+      }
+    }
+
+    stage('Qualité du code') {
+      steps {
+        dir('Playwright') {
+          sh 'npm run typecheck'
+          sh 'npm run lint'
+          sh 'npm run format:check'
+        }
+      }
+    }
+
+    stage('Tests E2E') {
+      steps {
+        script {
+          def grep = params.SUITE == 'all' ? '' : "--grep @${params.SUITE}"
+          def project = params.BROWSER == 'all' ? '' : "--project=${params.BROWSER} --project=${params.BROWSER}-bdd"
+          def overrides = params.BASE_URL?.trim() ? ["BASE_URL=${params.BASE_URL.trim()}"] : []
+
+          withEnv(overrides) {
+            withCredentials([usernamePassword(
+              credentialsId: "e2e-user-${params.TEST_ENV}",
+              usernameVariable: 'USER_EMAIL',
+              passwordVariable: 'USER_PASSWORD'
+            )]) {
+              dir('Playwright') {
+                sh "npm test -- ${grep} ${project}"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      junit allowEmptyResults: true, testResults: 'reports/junit/results.xml'
+      // Screenshots, vidéos et traces des tests en échec sont dans reports/test-results.
+      archiveArtifacts allowEmptyArchive: true, artifacts: 'reports/test-results/**, reports/reporting-labs/**, reports/html-report/**'
+      // Jenkins bloque par défaut le JavaScript des rapports publiés (CSP) : sans assouplissement
+      // par un administrateur, télécharger reports/reporting-labs depuis les artefacts et ouvrir index.html.
+      publishHTML(target: [
+        reportName: 'reportingLabs',
+        reportDir: 'reports/reporting-labs',
+        reportFiles: 'index.html',
+        keepAll: true,
+        alwaysLinkToLastBuild: true,
+        allowMissing: true
+      ])
+      publishHTML(target: [
+        reportName: 'Playwright Report',
+        reportDir: 'reports/html-report',
+        reportFiles: 'index.html',
+        keepAll: true,
+        alwaysLinkToLastBuild: true,
+        allowMissing: true
+      ])
+    }
+  }
+}

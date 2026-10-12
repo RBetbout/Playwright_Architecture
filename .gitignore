@@ -1,0 +1,22 @@
+node_modules/
+
+# Configuration locale et secrets : seul .env.example est versionné
+.env
+.env.*
+!.env.example
+
+# Artefacts générés
+.features-gen/
+reports/*
+!reports/.gitkeep
+playwright/.cache/
+blob-report/
+.reporting-labs-history.json
+
+# Documentation de cadrage, non versionnée
+/Context/
+
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/

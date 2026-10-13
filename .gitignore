@@ -6,7 +6,6 @@ node_modules/
 !.env.example
 
 # Artefacts générés
-.features-gen/
 reports/*
 !reports/.gitkeep
 playwright/.cache/

@@ -1,0 +1,10 @@
+# Les chemins partent de la racine du dépôt (contexte de build).
+.git
+Context
+reports
+**/node_modules
+
+# Les fichiers d'environnement contiennent des secrets : ils sont montés à l'exécution, jamais copiés dans l'image.
+**/.env
+**/.env.*
+!**/.env.example

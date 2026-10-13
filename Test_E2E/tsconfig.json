@@ -1,0 +1,4 @@
+{
+  "extends": "../Configuration_Playwright/config_playwright/tsconfig.json",
+  "include": ["**/*.ts"]
+}

@@ -1,0 +1,62 @@
+# Lancé par les commandes `npm run docker:*` (voir le README).
+#   - postgres, mysql : bases locales vides pour écrire et mettre au point des tests de base de données
+#   - tests           : exécution des tests dans un conteneur identique sur tous les postes et en CI
+name: rb-e2e
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: e2e
+      POSTGRES_USER: e2e
+      POSTGRES_PASSWORD: e2e
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U e2e -d e2e']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: e2e
+      MYSQL_USER: e2e
+      MYSQL_PASSWORD: e2e
+      MYSQL_ROOT_PASSWORD: e2e
+    ports:
+      - '3306:3306'
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u e2e -pe2e --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  tests:
+    # Le profil évite que `docker compose up` lance les tests : ils se lancent avec `run`.
+    profiles: ['tests']
+    build:
+      context: ../..
+      dockerfile: Configuration_Playwright/config_docker/Dockerfile
+    init: true
+    ipc: host
+    # Seules les variables définies sur le poste (ou par Jenkins) sont transmises ; elles priment sur le fichier .env.
+    # Depuis ce conteneur, les bases ci-dessus s'appellent "postgres" et "mysql", pas "localhost" (DB_HOST).
+    environment:
+      - TEST_ENV
+      - BASE_URL
+      - API_URL
+      - API_TOKEN
+      - USER_EMAIL
+      - USER_PASSWORD
+      - DB_ENGINE
+      - DB_HOST
+      - DB_PORT
+      - DB_NAME
+      - DB_USER
+      - DB_PASSWORD
+      - LOG_LEVEL
+    volumes:
+      - ../../Test_E2E/Support/config/environments:/work/Test_E2E/Support/config/environments:ro
+      - ../../reports:/work/reports
